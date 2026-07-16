@@ -82,6 +82,7 @@ async function run() {
     const db = client.db("adminPanel");
 
     const usersCollection = db.collection("users");
+    const inquiriesCollection = db.collection("inquiries");
 
     // ======================
     // Root
@@ -252,6 +253,128 @@ async function run() {
     res.status(200).json({
       success: true,
       user,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
+
+    // ======================
+    // Inquiry 
+    // ======================
+
+    // 1. POST Inquiry (Public)
+
+    app.post("/inquiries", async (req, res) => {
+  try {
+    const inquiry = req.body;
+
+    if (
+      !inquiry.firstName ||
+      !inquiry.lastName ||
+      !inquiry.email ||
+      !inquiry.phone ||
+      !inquiry.message
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    inquiry.status = "Unread";
+    inquiry.createdAt = new Date();
+
+    const result = await inquiriesCollection.insertOne(inquiry);
+
+    res.status(201).json({
+      success: true,
+      insertedId: result.insertedId,
+      message: "Inquiry submitted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
+
+// 2. GET All Inquiry (Admin)
+
+app.get("/inquiries", verifyToken, async (req, res) => {
+  try {
+    const result = await inquiriesCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json({
+      success: true,
+      inquiries: result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
+
+// 3. PATCH Status
+
+app.patch("/inquiries/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const result = await inquiriesCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          status,
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
+
+// 4. DELETE
+
+app.delete("/inquiries/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await inquiriesCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.json({
+      success: true,
+      deletedCount: result.deletedCount,
     });
   } catch (error) {
     console.log(error);
