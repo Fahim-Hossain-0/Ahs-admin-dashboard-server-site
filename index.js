@@ -48,12 +48,10 @@ const client = new MongoClient(uri, {
 // ======================
 
 const verifyToken = (req, res, next) => {
-  console.log("Cookies:", req.cookies);
-
   const token = req.cookies?.token;
 
   if (!token) {
-    return res.status(401).send({
+    return res.status(401).json({
       success: false,
       message: "Unauthorized",
     });
@@ -61,7 +59,7 @@ const verifyToken = (req, res, next) => {
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
-      return res.status(401).send({
+      return res.status(401).json({
         success: false,
         message: "Invalid Token",
       });
@@ -137,55 +135,70 @@ async function run() {
     // ======================
 
    app.post("/login", async (req, res) => {
-  console.log("NODE_ENV:", process.env.NODE_ENV);
+  try {
+    const { email, password } = req.body;
 
-  const { email, password } = req.body;
-
-  const user = await usersCollection.findOne({ email });
-
-  if (!user) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid Email",
-    });
-  }
-
-  const matched = await bcrypt.compare(password, user.password);
-
-  if (!matched) {
-    return res.status(401).json({
-      success: false,
-      message: "Wrong Password",
-    });
-  }
-
-  const token = jwt.sign(
-    {
-      id: user._id,
-      email: user.email,
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: "7d",
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and Password are required.",
+      });
     }
-  );
 
-  console.log("JWT:", token);
+    const user = await usersCollection.findOne({ email });
 
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    path: "/",
-    maxAge: 1000 * 60 * 60 * 24 * 7,
-  });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Email",
+      });
+    }
 
-  console.log("Cookie added");
+    const matched = await bcrypt.compare(password, user.password);
 
-  return res.status(200).json({
-    success: true,
-    message: "Login Successful",
-  });
+    if (!matched) {
+      return res.status(401).json({
+        success: false,
+        message: "Wrong Password",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Login Successful",
+      user: {
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
 });
 
     // ======================
@@ -211,22 +224,44 @@ async function run() {
     // ======================
 
     app.get("/verify-token", verifyToken, async (req, res) => {
-      const user = await usersCollection.findOne(
-        {
-          _id: new ObjectId(req.user.id),
-        },
-        {
-          projection: {
-            password: 0,
-          },
-        }
-      );
-
-      res.send({
-        success: true,
-        user,
-      });
+  try {
+    res.set({
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+      Expires: "0",
     });
+
+    const user = await usersCollection.findOne(
+      {
+        _id: new ObjectId(req.user.id),
+      },
+      {
+        projection: {
+          password: 0,
+        },
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+});
 
     console.log("✅ MongoDB Connected");
   } finally {
