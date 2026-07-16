@@ -292,6 +292,7 @@ async function run() {
 
     const result = await inquiriesCollection.insertOne(inquiry);
 
+    
     res.status(201).json({
       success: true,
       insertedId: result.insertedId,
