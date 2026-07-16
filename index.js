@@ -48,6 +48,8 @@ const client = new MongoClient(uri, {
 // ======================
 
 const verifyToken = (req, res, next) => {
+  console.log("Cookies:", req.cookies);
+
   const token = req.cookies?.token;
 
   if (!token) {
