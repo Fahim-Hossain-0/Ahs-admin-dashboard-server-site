@@ -136,57 +136,57 @@ async function run() {
     // Login
     // ======================
 
-    app.post("/login", async (req, res) => {
-      const { email, password } = req.body;
+   app.post("/login", async (req, res) => {
+  console.log("NODE_ENV:", process.env.NODE_ENV);
 
-      if (!email || !password) {
-        return res.status(400).send({
-          success: false,
-          message: "Email and Password required",
-        });
-      }
+  const { email, password } = req.body;
 
-      const user = await usersCollection.findOne({ email });
+  const user = await usersCollection.findOne({ email });
 
-      if (!user) {
-        return res.status(401).send({
-          success: false,
-          message: "Invalid Email",
-        });
-      }
-
-      const matched = await bcrypt.compare(password, user.password);
-
-      if (!matched) {
-        return res.status(401).send({
-          success: false,
-          message: "Wrong Password",
-        });
-      }
-
-      const token = jwt.sign(
-        {
-          id: user._id,
-          email: user.email,
-        },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: "7d",
-        }
-      );
-
-      res
-        .cookie("token", token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite:
-            process.env.NODE_ENV === "production" ? "none" : "lax",
-        })
-        .send({
-          success: true,
-          message: "Login Successful",
-        });
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid Email",
     });
+  }
+
+  const matched = await bcrypt.compare(password, user.password);
+
+  if (!matched) {
+    return res.status(401).json({
+      success: false,
+      message: "Wrong Password",
+    });
+  }
+
+  const token = jwt.sign(
+    {
+      id: user._id,
+      email: user.email,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "7d",
+    }
+  );
+
+  console.log("JWT:", token);
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+  });
+
+  console.log("Cookie added");
+
+  return res.status(200).json({
+    success: true,
+    message: "Login Successful",
+  });
+});
 
     // ======================
     // Logout
