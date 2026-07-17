@@ -312,19 +312,39 @@ async function run() {
 
 app.get("/inquiries", verifyToken, async (req, res) => {
   try {
+    const { search = "", status = "All" } = req.query;
+
+    const query = {};
+
+    // Search
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: "i" } },
+        { lastName: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+        { message: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Status filter
+    if (status !== "All") {
+      query.status = status;
+    }
+
     const result = await inquiriesCollection
-      .find()
+      .find(query)
       .sort({ createdAt: -1 })
       .toArray();
 
-    res.json({
+    res.send({
       success: true,
       inquiries: result,
     });
   } catch (error) {
     console.log(error);
 
-    res.status(500).json({
+    res.status(500).send({
       success: false,
       message: "Internal Server Error",
     });
