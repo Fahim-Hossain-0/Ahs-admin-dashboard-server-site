@@ -1,10 +1,12 @@
 require("dotenv").config();
-
+const upload = require("./middleware/multer");
+const cloudinary = require("./utils/cloudinary");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+
 const {
   MongoClient,
   ServerApiVersion,
@@ -83,6 +85,7 @@ async function run() {
 
     const usersCollection = db.collection("users");
     const inquiriesCollection = db.collection("inquiries");
+    const projectsCollection = db.collection("projects");
 
     // ======================
     // Root
@@ -91,6 +94,46 @@ async function run() {
     app.get("/", (req, res) => {
       res.send("Admin Server Running...");
     });
+
+  // ======================
+    // Upload image API
+  // ======================
+
+app.post(
+  "/upload-image",
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).send({
+          success: false,
+          message: "Image is required",
+        });
+      }
+
+      const base64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString(
+        "base64"
+      )}`;
+
+      const result = await cloudinary.uploader.upload(base64, {
+        folder: "portfolio-projects",
+      });
+
+      res.send({
+        success: true,
+        imageUrl: result.secure_url,
+      });
+    } catch (error) {
+      console.log(error);
+
+      res.status(500).send({
+        success: false,
+        message: "Upload failed",
+      });
+    }
+  }
+);
+
 
     // ======================
     // create admin
@@ -406,6 +449,161 @@ app.delete("/inquiries/:id", verifyToken, async (req, res) => {
     });
   }
 });
+
+// ======================
+    // projects 
+    // ======================
+
+// 1.Create Project
+
+app.post("/projects", verifyToken, async (req, res) => {
+  try {
+    const project = req.body;
+  // console.dir(req.body, { depth: null });
+    project.createdAt = new Date();
+
+    const result = await projectsCollection.insertOne(project);
+
+    res.send({
+      success: true,
+      insertedId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 2.Get All Projects
+
+app.get("/projects", async (req, res) => {
+  try {
+    const { search = "" } = req.query;
+
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        {
+          title: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          category: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          description: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    const projects = await projectsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(projects);
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 3. Get Single Project
+
+app.get("/projects/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const project = await projectsCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send(project);
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 4.Update Project
+
+app.patch("/projects/:id", verifyToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const data = req.body;
+
+    const result = await projectsCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: data,
+      }
+    );
+
+    res.send({
+      success: true,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 5.Delete Project
+
+app.delete("/projects/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log("Delete ID:", id);
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid project id",
+      });
+    }
+
+    const result = await projectsCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    console.log(result);
+
+    res.send({
+      success: true,
+      deletedCount: result.deletedCount,
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
 
     console.log("✅ MongoDB Connected");
   } finally {
