@@ -98,77 +98,96 @@ async function run() {
     });
 
   // ======================
-    // Upload image in Cloudinary == API
+    // Upload helper
   // ======================
 
-app.post(
-  "/upload-image",
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).send({
-          success: false,
-          message: "Image is required",
-        });
-      }
-
-      const base64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString(
+    async function uploadToCloudinary(file, { folder, resourceType } = {}) {
+      const base64 = `data:${file.mimetype};base64,${file.buffer.toString(
         "base64"
       )}`;
 
       const result = await cloudinary.uploader.upload(base64, {
+        folder: folder || "portfolio-projects",
+        resource_type: resourceType || "image",
+      });
+
+      return result.secure_url;
+    }
+
+  // ======================
+    // Upload image
+  // ======================
+
+app.post(
+  "/upload-image",
+  verifyToken,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Image file is required",
+        });
+      }
+
+      if (!req.file.mimetype.startsWith("image/")) {
+        return res.status(400).json({
+          success: false,
+          message: "Only image files are allowed",
+        });
+      }
+
+      const url = await uploadToCloudinary(req.file, {
         folder: "portfolio-projects",
       });
 
-      res.send({
-        success: true,
-        imageUrl: result.secure_url,
-      });
+      res.json({ success: true, url });
     } catch (error) {
-      console.log(error);
+      console.error(error);
 
-      res.status(500).send({
+      res.status(500).json({
         success: false,
-        message: "Upload failed",
+        message: "Image upload failed",
       });
     }
   }
 );
 
 // ======================
-    // Upload PDF in Cloudinary == API
+    // Upload PDF
   // ======================
 
   app.post(
   "/upload-pdf",
+  verifyToken,
   upload.single("pdf"),
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).send({
+        return res.status(400).json({
           success: false,
-          message: "PDF is required",
+          message: "PDF file is required",
         });
       }
 
-      const base64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString(
-        "base64"
-      )}`;
+      if (req.file.mimetype !== "application/pdf") {
+        return res.status(400).json({
+          success: false,
+          message: "Only PDF files are allowed",
+        });
+      }
 
-      const result = await cloudinary.uploader.upload(base64, {
+      const url = await uploadToCloudinary(req.file, {
         folder: "portfolio-projects/pdfs",
-        resource_type: "raw", // <-- IMPORTANT
+        resourceType: "raw",
       });
 
-      res.send({
-        success: true,
-        pdfUrl: result.secure_url,
-      });
+      res.json({ success: true, url });
     } catch (error) {
       console.error(error);
 
-      res.status(500).send({
+      res.status(500).json({
         success: false,
         message: "PDF upload failed",
       });
