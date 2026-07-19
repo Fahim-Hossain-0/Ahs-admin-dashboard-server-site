@@ -86,6 +86,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const inquiriesCollection = db.collection("inquiries");
     const projectsCollection = db.collection("projects");
+    const designsCollection = db.collection("designs");
 
     // ======================
     // Root
@@ -604,6 +605,191 @@ app.delete("/projects/:id", verifyToken, async (req, res) => {
   }
 });
 
+    // ======================
+    // interior-design
+    // ======================
+// 1. Validation Helper
+
+    const validateDesign = (data) => {
+  const errors = [];
+
+  if (!data.title?.trim()) {
+    errors.push("Title is required");
+  }
+
+  if (!data.description?.trim()) {
+    errors.push("Description is required");
+  }
+
+  if (!Array.isArray(data.images) || data.images.length === 0) {
+    errors.push("At least one image is required");
+  }
+
+  return errors;
+};
+
+// 2. GET All Designs
+
+app.get("/designs", async (req, res) => {
+  try {
+    const result = await designsCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch designs",
+      error: error.message,
+    });
+  }
+});
+
+// 4. GET All Designs
+
+app.get("/designs", async (req, res) => {
+  try {
+    const result = await designsCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch designs",
+      error: error.message,
+    });
+  }
+});
+
+// 5.GET Single Design
+
+app.get("/designs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await designsCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!result) {
+      return res.status(404).send({
+        message: "Design not found",
+      });
+    }
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to fetch design",
+      error: error.message,
+    });
+  }
+});
+
+// 6.POST Design
+
+app.post("/designs", async (req, res) => {
+  try {
+    const body = req.body;
+
+    const errors = validateDesign(body);
+
+    if (errors.length) {
+      return res.status(400).send({
+        message: errors,
+      });
+    }
+
+    const design = {
+      title: body.title.trim(),
+      description: body.description.trim(),
+      images: body.images,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await designsCollection.insertOne(design);
+
+    res.send({
+      insertedId: result.insertedId,
+      message: "Design created successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to create design",
+      error: error.message,
+    });
+  }
+});
+
+// 5.PATCH Design
+
+app.patch("/designs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const body = req.body;
+
+    const errors = validateDesign(body);
+
+    if (errors.length) {
+      return res.status(400).send({
+        message: errors,
+      });
+    }
+
+    const updateDoc = {
+      $set: {
+        title: body.title.trim(),
+        description: body.description.trim(),
+        images: body.images,
+        updatedAt: new Date(),
+      },
+    };
+
+    const result = await designsCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      updateDoc
+    );
+
+    res.send({
+      modifiedCount: result.modifiedCount,
+      message: "Design updated successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to update design",
+      error: error.message,
+    });
+  }
+});
+
+// 6.DELETE Design
+
+app.delete("/designs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await designsCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send({
+      deletedCount: result.deletedCount,
+      message: "Design deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to delete design",
+      error: error.message,
+    });
+  }
+});
 
     console.log("✅ MongoDB Connected");
   } finally {
