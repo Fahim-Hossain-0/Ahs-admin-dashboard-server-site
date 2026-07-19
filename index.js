@@ -87,6 +87,7 @@ async function run() {
     const inquiriesCollection = db.collection("inquiries");
     const projectsCollection = db.collection("projects");
     const designsCollection = db.collection("designs");
+    const layoutCollection = db.collection("layouts");
 
     // ======================
     // Root
@@ -97,7 +98,7 @@ async function run() {
     });
 
   // ======================
-    // Upload image API
+    // Upload image in Cloudinary == API
   // ======================
 
 app.post(
@@ -135,6 +136,45 @@ app.post(
   }
 );
 
+// ======================
+    // Upload PDF in Cloudinary == API
+  // ======================
+
+  app.post(
+  "/upload-pdf",
+  upload.single("pdf"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).send({
+          success: false,
+          message: "PDF is required",
+        });
+      }
+
+      const base64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString(
+        "base64"
+      )}`;
+
+      const result = await cloudinary.uploader.upload(base64, {
+        folder: "portfolio-projects/pdfs",
+        resource_type: "raw", // <-- IMPORTANT
+      });
+
+      res.send({
+        success: true,
+        pdfUrl: result.secure_url,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).send({
+        success: false,
+        message: "PDF upload failed",
+      });
+    }
+  }
+);
 
     // ======================
     // create admin
@@ -452,7 +492,7 @@ app.delete("/inquiries/:id", verifyToken, async (req, res) => {
 });
 
 // ======================
-    // projects 
+    // projects create
     // ======================
 
 // 1.Create Project
@@ -646,7 +686,7 @@ app.get("/designs", async (req, res) => {
   }
 });
 
-// 4. GET All Designs
+// 3. GET All Designs
 
 app.get("/designs", async (req, res) => {
   try {
@@ -664,7 +704,7 @@ app.get("/designs", async (req, res) => {
   }
 });
 
-// 5.GET Single Design
+// 4.GET Single Design
 
 app.get("/designs/:id", async (req, res) => {
   try {
@@ -689,7 +729,7 @@ app.get("/designs/:id", async (req, res) => {
   }
 });
 
-// 6.POST Design
+// 5.POST Design
 
 app.post("/designs", async (req, res) => {
   try {
@@ -725,7 +765,7 @@ app.post("/designs", async (req, res) => {
   }
 });
 
-// 5.PATCH Design
+// 6.PATCH Design
 
 app.patch("/designs/:id", async (req, res) => {
   try {
@@ -769,7 +809,7 @@ app.patch("/designs/:id", async (req, res) => {
   }
 });
 
-// 6.DELETE Design
+// 7.DELETE Design
 
 app.delete("/designs/:id", async (req, res) => {
   try {
@@ -787,6 +827,156 @@ app.delete("/designs/:id", async (req, res) => {
     res.status(500).send({
       message: "Failed to delete design",
       error: error.message,
+    });
+  }
+});
+
+// ======================
+    // layout design
+    // ======================
+// 1.Create Layout
+
+app.post("/layouts", verifyToken, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      image,
+      pdfUrl,
+    } = req.body;
+
+    if (!title || !description || !image || !pdfUrl) {
+      return res.status(400).send({
+        success: false,
+        message: "Title, description, image and PDF URL are required.",
+      });
+    }
+
+    const layout = {
+      title,
+      description,
+      image,
+      pdfUrl,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await layoutCollection.insertOne(layout);
+
+    res.send({
+      success: true,
+      message: "Layout created successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// 2.Get All Layouts
+
+app.get("/layouts", async (req, res) => {
+  try {
+    const layouts = await layoutCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(layouts);
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// 3.Get Single Layout
+
+app.get("/layouts/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const layout = await layoutCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!layout) {
+      return res.status(404).send({
+        success: false,
+        message: "Layout not found.",
+      });
+    }
+
+    res.send(layout);
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// 4.Update Layout
+
+app.patch("/layouts/:id", verifyToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const {
+      title,
+      description,
+      image,
+      pdfUrl,
+    } = req.body;
+
+    const result = await layoutCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          title,
+          description,
+          image,
+          pdfUrl,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    res.send({
+      success: true,
+      message: "Layout updated successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// 5.Delete Layout
+
+app.delete("/layouts/:id", verifyToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await layoutCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send({
+      success: true,
+      message: "Layout deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
     });
   }
 });
