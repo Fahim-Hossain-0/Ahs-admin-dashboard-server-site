@@ -88,6 +88,7 @@ async function run() {
     const projectsCollection = db.collection("projects");
     const designsCollection = db.collection("designs");
     const layoutCollection = db.collection("layouts");
+    const blogsCollection = db.collection("blogs");
 
     // ======================
     // Root
@@ -98,25 +99,33 @@ async function run() {
     });
 
   // ======================
-    // Upload helper
+// Upload Helper
+// ======================
+
+async function uploadToCloudinary(file, options = {}) {
+  const {
+    folder = "portfolio-projects",
+    resourceType = "image",
+  } = options;
+
+  const base64 = `data:${file.mimetype};base64,${file.buffer.toString(
+    "base64"
+  )}`;
+
+  const result = await cloudinary.uploader.upload(base64, {
+    folder,
+    resource_type: resourceType,
+  });
+
+  return {
+    url: result.secure_url,
+    public_id: result.public_id,
+  };
+}
+
   // ======================
-
-    async function uploadToCloudinary(file, { folder, resourceType } = {}) {
-      const base64 = `data:${file.mimetype};base64,${file.buffer.toString(
-        "base64"
-      )}`;
-
-      const result = await cloudinary.uploader.upload(base64, {
-        folder: folder || "portfolio-projects",
-        resource_type: resourceType || "image",
-      });
-
-      return result.secure_url;
-    }
-
-  // ======================
-    // Upload image
-  // ======================
+// Upload Image
+// ======================
 
 app.post(
   "/upload-image",
@@ -127,38 +136,51 @@ app.post(
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: "Image file is required",
+          message: "No file received. Ensure the field name is 'image' and Content-Type is multipart/form-data.",
+        });
+      }
+
+      if (!req.file.buffer) {
+        return res.status(400).json({
+          success: false,
+          message: "File buffer is empty. The file may be corrupted.",
         });
       }
 
       if (!req.file.mimetype.startsWith("image/")) {
         return res.status(400).json({
           success: false,
-          message: "Only image files are allowed",
+          message: `Invalid file type '${req.file.mimetype}'. Only image files are allowed.`,
         });
       }
 
-      const url = await uploadToCloudinary(req.file, {
+      const image = await uploadToCloudinary(req.file, {
         folder: "portfolio-projects",
+        resourceType: "image",
       });
 
-      res.json({ success: true, url });
+      res.status(200).json({
+        success: true,
+        message: "Image uploaded successfully.",
+        file: image,
+      });
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
         success: false,
-        message: "Image upload failed",
+        message: error.message || "Image upload failed.",
+        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
       });
     }
   }
 );
 
 // ======================
-    // Upload PDF
-  // ======================
+// Upload PDF
+// ======================
 
-  app.post(
+app.post(
   "/upload-pdf",
   verifyToken,
   upload.single("pdf"),
@@ -167,29 +189,41 @@ app.post(
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: "PDF file is required",
+          message: "No PDF file received. Ensure the field name is 'pdf' and Content-Type is multipart/form-data.",
+        });
+      }
+
+      if (!req.file.buffer) {
+        return res.status(400).json({
+          success: false,
+          message: "File buffer is empty. The file may be corrupted.",
         });
       }
 
       if (req.file.mimetype !== "application/pdf") {
         return res.status(400).json({
           success: false,
-          message: "Only PDF files are allowed",
+          message: `Invalid file type '${req.file.mimetype}'. Only PDF files are allowed.`,
         });
       }
 
-      const url = await uploadToCloudinary(req.file, {
+      const pdf = await uploadToCloudinary(req.file, {
         folder: "portfolio-projects/pdfs",
         resourceType: "raw",
       });
 
-      res.json({ success: true, url });
+      res.status(200).json({
+        success: true,
+        message: "PDF uploaded successfully.",
+        file: pdf,
+      });
     } catch (error) {
       console.error(error);
 
       res.status(500).json({
         success: false,
-        message: "PDF upload failed",
+        message: error.message || "PDF upload failed.",
+        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
       });
     }
   }
@@ -657,6 +691,257 @@ app.delete("/projects/:id", verifyToken, async (req, res) => {
   } catch (err) {
     console.error(err);
 
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+    // ======================
+    // blogs
+    // ======================
+
+// 1. Create Blog
+
+app.post("/blogs", verifyToken, async (req, res) => {
+  try {
+    const blog = req.body;
+
+    if (!blog.title?.trim()) {
+      return res.status(400).send({
+        success: false,
+        message: "Blog title is required.",
+      });
+    }
+
+    // Check slug uniqueness
+    if (blog.slug) {
+      const existing = await blogsCollection.findOne({ slug: blog.slug });
+      if (existing) {
+        return res.status(409).send({
+          success: false,
+          message: `A blog with slug "${blog.slug}" already exists.`,
+        });
+      }
+    }
+
+    blog.createdAt = new Date();
+    blog.updatedAt = new Date();
+    blog.views = blog.views || 0;
+
+    if (blog.publishDate) {
+      blog.publishDate = new Date(blog.publishDate);
+    }
+
+    const result = await blogsCollection.insertOne(blog);
+
+    res.send({
+      success: true,
+      insertedId: result.insertedId,
+    });
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 2. Get All Blogs
+
+app.get("/blogs", async (req, res) => {
+  try {
+    const { search = "" } = req.query;
+
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { author: { $regex: search, $options: "i" } },
+        { "author.name": { $regex: search, $options: "i" } },
+        { excerpt: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const blogs = await blogsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(blogs);
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 3. Get Blog by Slug
+
+app.get("/blogs/slug/:slug", async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const blog = await blogsCollection.findOne({ slug });
+
+    if (!blog) {
+      return res.status(404).send({
+        success: false,
+        message: "Blog not found",
+      });
+    }
+
+    res.send(blog);
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 4. Get Single Blog
+
+app.get("/blogs/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid blog id",
+      });
+    }
+
+    const blog = await blogsCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!blog) {
+      return res.status(404).send({
+        success: false,
+        message: "Blog not found",
+      });
+    }
+
+    res.send(blog);
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 5. Update Blog
+
+app.patch("/blogs/:id", verifyToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid blog id",
+      });
+    }
+
+    const data = req.body;
+
+    // Check slug uniqueness if slug changed
+    if (data.slug) {
+      const existing = await blogsCollection.findOne({
+        slug: data.slug,
+        _id: { $ne: new ObjectId(id) },
+      });
+      if (existing) {
+        return res.status(409).send({
+          success: false,
+          message: `A blog with slug "${data.slug}" already exists.`,
+        });
+      }
+    }
+
+    if (data.publishDate) {
+      data.publishDate = new Date(data.publishDate);
+    }
+
+    data.updatedAt = new Date();
+
+    const result = await blogsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: data }
+    );
+
+    res.send({
+      success: true,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 6. Delete Blog
+
+app.delete("/blogs/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid blog id",
+      });
+    }
+
+    const result = await blogsCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send({
+      success: true,
+      deletedCount: result.deletedCount,
+    });
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// 7. Increment Blog Views
+
+app.patch("/blogs/views/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid blog id",
+      });
+    }
+
+    const result = await blogsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $inc: { views: 1 } }
+    );
+
+    res.send({
+      success: true,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (err) {
     res.status(500).send({
       success: false,
       message: err.message,
