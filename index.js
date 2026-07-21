@@ -981,7 +981,7 @@ app.patch("/blogs/views/:id", async (req, res) => {
     // ======================
 // 1. Validation Helper
 
-    const validateDesign = (data) => {
+  const validateDesign = (data) => {
   const errors = [];
 
   if (!data.title?.trim()) {
