@@ -445,7 +445,8 @@ app.post(
   }
 });
 
-// 2. GET All Inquiry (Admin)
+
+// 2. GET All Inquiry in dashboard (Admin)
 
 app.get("/inquiries", verifyToken, async (req, res) => {
   try {
@@ -607,6 +608,30 @@ app.get("/projects", async (req, res) => {
       .toArray();
 
     res.send(projects);
+  } catch (err) {
+    res.status(500).send({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+//2.1 Get all data in main client side 
+
+app.get("/projects/slug/:slug", async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const project = await projectsCollection.findOne({ slug });
+
+    if (!project) {
+      return res.status(404).send({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    res.send(project);
   } catch (err) {
     res.status(500).send({
       success: false,
