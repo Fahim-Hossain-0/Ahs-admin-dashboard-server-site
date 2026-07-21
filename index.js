@@ -806,6 +806,8 @@ app.get("/blogs", async (req, res) => {
   }
 });
 
+
+
 // 3. Get Blog by Slug
 
 app.get("/blogs/slug/:slug", async (req, res) => {
@@ -997,23 +999,7 @@ app.patch("/blogs/views/:id", async (req, res) => {
   return errors;
 };
 
-// 2. GET All Designs
 
-app.get("/designs", async (req, res) => {
-  try {
-    const result = await designsCollection
-      .find()
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({
-      message: "Failed to fetch designs",
-      error: error.message,
-    });
-  }
-});
 
 // 3. GET All Designs
 
